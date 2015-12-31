@@ -34,6 +34,7 @@ const maxDataLength = 256
 const inPort = 50000
 
 func main() {
+	fmt.Println("TCP server V0.1")
 	// Listen on TCP port on all interfaces.
 	fmt.Println("Port: " + strconv.Itoa(inPort))
 	l, err := net.Listen("tcp", ":" + strconv.Itoa(inPort))
@@ -60,6 +61,22 @@ const (
 	wait_length_MSB
 	wait_data
 )
+
+// Existing types of protocol messages.
+const (
+	prot_msg_counter = 1
+)
+
+func handleProtMessage(message []byte) {
+	
+	switch message[0] {
+	case prot_msg_counter:
+		fmt.Printf("Counter message received: %d\n", message[1])
+	default:
+		fmt.Println("Unknown type of message received:", message[0])
+	}
+	
+}
 
 func handleConn(c net.Conn) {
 	// Automaton state.
@@ -134,7 +151,9 @@ func processRecData(data []byte, currentState int, dataLength int, recMessage []
 			rm = append(rm, b)
 			if len(rm) >= dataLength {
 				fmt.Println("Message received.")
-				// TODO: call message processing here.
+				// Handle message.
+				handleProtMessage(rm)
+				// Next state.
 				currentState = wait_length_LSB
 			}
 		default:
