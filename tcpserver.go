@@ -1,3 +1,21 @@
+/*
+ *  Copyright (C) 2015 Pascal Bodin
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 package main
 
 import (
@@ -5,20 +23,25 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"time"
 )
 
 // We do not accept frames with more than maxDataLength bytes of data.
 // If such a frame is received, associated connection is closed.
 const maxDataLength = 256
+// Port on which we will wait for TCP connection requests.
+const inPort = 50000
 
 func main() {
-	// Listen on TCP port 50000 on all interfaces.
-	l, err := net.Listen("tcp", ":50000")
+	fmt.Println("TCP server V0.1")
+	// Listen on TCP port on all interfaces.
+	fmt.Println("Port: " + strconv.Itoa(inPort))
+	l, err := net.Listen("tcp", ":" + strconv.Itoa(inPort))
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Waiting for connections on port 50000...")
+	fmt.Println("Waiting for connections...")
 	defer l.Close()
 	for {
 		// Wait for a connection.
@@ -38,6 +61,22 @@ const (
 	wait_length_MSB
 	wait_data
 )
+
+// Existing types of protocol messages.
+const (
+	prot_msg_counter = 1
+)
+
+func handleProtMessage(message []byte) {
+	
+	switch message[0] {
+	case prot_msg_counter:
+		fmt.Printf("Counter message received: %d\n", message[1])
+	default:
+		fmt.Println("Unknown type of message received:", message[0])
+	}
+	
+}
 
 func handleConn(c net.Conn) {
 	// Automaton state.
@@ -85,27 +124,37 @@ func processRecData(data []byte, currentState int, dataLength int, recMessage []
 		fmt.Printf("%02X ", b)
 		switch currentState {
 		case wait_length_LSB:
+			fmt.Println("wait_length_LSB")
 			dataLength = int(b)
 			currentState = wait_length_MSB
 		case wait_length_MSB:
+			fmt.Println("wait_length_MSB")
 			dataLength = dataLength + int(b)*256
 			if dataLength >= maxDataLength {
 				cs = currentState
 				dl = dataLength
 				rm = nil
+				// Connection will be closed by caller.
 				err = errors.New("Error: data length too large")
 				return cs, dl, rm, err
 			}
-			rm = nil
-			currentState = wait_data
-		case wait_data:
-			// Data length 0 is supported.
-			if len(rm) >= dataLength {
-				fmt.Printf("Message received: ", rm)
-				// TODO: call message processing here.
+			if dataLength == 0 {
+				// Empty frame: no data.
+				fmt.Println("Empty frame received.")
 				currentState = wait_length_LSB
 			} else {
-				rm = append(rm, b)
+				rm = nil
+				currentState = wait_data
+			}
+		case wait_data:
+			fmt.Println("wait_data")
+			rm = append(rm, b)
+			if len(rm) >= dataLength {
+				fmt.Println("Message received.")
+				// Handle message.
+				handleProtMessage(rm)
+				// Next state.
+				currentState = wait_length_LSB
 			}
 		default:
 			log.Fatal(errors.New("Error: unknown state"))
